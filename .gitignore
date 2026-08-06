@@ -1,0 +1,113 @@
+# ============================
+#  PYTHON / FASTAPI BACKEND
+# ============================
+
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Cache y herramientas
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs y temporales
+*.log
+*.tmp
+
+# ============================
+#  BASE DE DATOS / ALEMBIC
+# ============================
+
+# SQLite local (si lo usas para pruebas)
+*.db
+*.sqlite
+
+# Backups de base de datos
+*.sql
+backup_*.sql
+
+# Alembic temporal
+temp_alembic/
+temp_alembic/*
+
+# ============================
+#  SCRIPTS INTERNOS
+# ============================
+
+# Scripts sensibles o de mantenimiento
+scripts/
+scripts/*
+
+# Archivos de investigación/debug
+forensic_*.txt
+forensic_*.sql
+columnas.txt
+tablas.txt
+tablas_local.txt
+tablas_railway.txt
+crear_tablas.py
+infiltracion.py
+reset_admin.py
+separar_identidades.py
+seed_*.py
+test_dto.py
+
+# ============================
+#  FRONTEND (Vite)
+# ============================
+
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Archivos de lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# ============================
+#  DOCKER
+# ============================
+
+# Volúmenes y datos generados
+docker-data/
+docker-volumes/
+*.pid
+
+# ============================
+#  OTROS
+# ============================
+
+# Archivos de cache generales
+*.cache
+*.bak
+
+# Archivos de editor
+*.swp
+*.swo
+.env
+__pycache__/
+node_modules/

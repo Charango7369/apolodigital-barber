@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: maestro_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Bp9RyP9g64Bhx6D3dHSQuXdamLeZ2OOc
+      POSTGRES_DB: maestro_saas
+    ports:
+      - "5433:5432"   # ← puerto corregido
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .                 # ← ahora sí construye usando tu Dockerfile
+    container_name: maestro_api
+    restart: always
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:Bp9RyP9g64Bhx6D3dHSQuXdamLeZ2OOc@db:5432/maestro_saas
+      SECRET_KEY: dak9Ou4dljtGgtY3qc9Ai1bPASB7QSyl
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
