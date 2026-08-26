@@ -42,6 +42,22 @@ class ClientRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_phone_and_tenant(
+        self, phone: str, tenant_id: uuid.UUID, exclude_client_id: uuid.UUID | None = None
+    ) -> Client | None:
+        """Busca un cliente activo con este teléfono en el tenant, opcionalmente
+        excluyendo al cliente que se está editando (para no auto-matchear)."""
+        stmt = select(Client).where(
+            Client.tenant_id == tenant_id,
+            Client.phone == phone,
+            Client.is_active == True,
+        )
+        if exclude_client_id:
+            stmt = stmt.where(Client.id != exclude_client_id)
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def update(self, client: Client, data: ClientUpdate) -> Client:
         update_data = data.model_dump(exclude_unset=True)
         for key, value in update_data.items():

@@ -1,4 +1,5 @@
 #app\modules\tenants\schemas.py
+import re
 import uuid
 from datetime import datetime
 from typing import Optional, Any
@@ -6,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.currencies import VALID_CURRENCY_CODES
+
+SLUG_PATTERN = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
 
 
 def _validate_iana_timezone(v: str) -> str:
@@ -84,11 +87,25 @@ class TenantUpdate(BaseModel):
 
 class TenantResponse(TenantBase):
     id: uuid.UUID
+    slug: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateSlugRequest(BaseModel):
+    slug: str = Field(..., min_length=3, max_length=100)
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug_format(cls, v: str) -> str:
+        if not SLUG_PATTERN.match(v):
+            raise ValueError(
+                "El slug solo puede tener minúsculas, números y guiones (ej: 'apolo-barber')."
+            )
+        return v
 
 
 class TenantRegistrationRequest(BaseModel):

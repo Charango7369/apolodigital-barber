@@ -42,3 +42,28 @@ class MyStatsResponse(BaseModel):
     total_commission_earned: Decimal
     completed_count: int
     
+class PeakHour(BaseModel):
+    hour: int
+    count: int
+
+class DayBreakdown(BaseModel):
+    day: date
+    appointment_count: int
+    revenue: Decimal
+
+class DashboardSummaryResponse(BaseModel):
+    start_date: date
+    end_date: date
+    currency: str
+    total_revenue: Decimal
+    total_commissions: Decimal
+    net_revenue: Decimal
+    average_ticket: Decimal  # NUEVO
+    appointment_counts: AppointmentStatusCounts
+    by_barber: list[BarberBreakdown]
+    by_service: list[ServiceBreakdown]
+    peak_hours: list[PeakHour]  # NUEVO
+    top_payment_method: str | None  # NUEVO
+    new_clients: int  # NUEVO
+    returning_clients: int  # NUEVO
+    appointments_by_day: list[DayBreakdown]  # NUEVO

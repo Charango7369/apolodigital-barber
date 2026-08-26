@@ -1,3 +1,4 @@
+#app\modules\clients\models.py
 from datetime import date
 from sqlalchemy import String, Date, Text
 from sqlalchemy.orm import Mapped, mapped_column

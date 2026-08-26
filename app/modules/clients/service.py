@@ -30,6 +30,19 @@ class ClientService:
 
     async def update_client(self, client_id: uuid.UUID, data: ClientUpdate, tenant_id: uuid.UUID) -> Client:
         client = await self.get_client(client_id, tenant_id)
+
+        # Solo valida duplicado si el teléfono realmente está cambiando
+        if data.phone and data.phone != client.phone:
+            existing = await self.repository.get_by_phone_and_tenant(
+                phone=data.phone, tenant_id=tenant_id, exclude_client_id=client_id
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Ya existe un cliente activo con este teléfono: "
+                           f"{existing.first_name} {existing.last_name or ''}".strip()
+                )
+
         return await self.repository.update(client, data)
 
     async def delete_client(self, client_id: uuid.UUID, tenant_id: uuid.UUID) -> None:

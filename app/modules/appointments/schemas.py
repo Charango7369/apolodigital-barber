@@ -1,6 +1,6 @@
 #app\modules\appointments\schemas.py
 import uuid
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,3 +42,13 @@ class AppointmentResponse(AppointmentBase):
     completed_by: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+    
+class AvailableSlot(BaseModel):
+    start_time: datetime
+    end_time: datetime
+
+class AvailabilityResponse(BaseModel):
+    service_id: uuid.UUID
+    barber_id: Optional[uuid.UUID]
+    date: str  # YYYY-MM-DD
+    available_slots: List[AvailableSlot]

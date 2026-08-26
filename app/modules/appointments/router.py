@@ -27,6 +27,16 @@ from app.modules.barbers.models import Barber
 from app.modules.services.models import Service
 from app.modules.clients.models import Client
 
+from app.modules.tenants.models import Tenant
+from app.modules.appointments.schemas import (
+    AppointmentCreate,
+    AppointmentUpdate,
+    AppointmentResponse,
+    CompleteAppointmentRequest,
+    AvailableSlot,
+    AvailabilityResponse  # <-- AGREGAR
+)
+
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
 DAYS_EN = {0: "monday", 1: "tuesday", 2: "wednesday", 3: "thursday",
@@ -42,7 +52,7 @@ def validate_minimum_notice(start_time: datetime, tenant_tz: ZoneInfo, minutes: 
     if start_time < (now + timedelta(minutes=minutes)):
         raise HTTPException(
             status_code=400,
-            detail=f"La reserva debe realizarse con al menos {minutes} minutos de anticipación."
+            detail=f"La reserva debe realizarse con al menos {minutes} minutos de anticipación. Por favor, selecciona un horario más lejano."
         )
 
 
@@ -126,6 +136,86 @@ async def validate_no_overlap(
             detail="El barbero ya tiene una cita programada en este horario."
         )
 
+@router.get("/availability", response_model=AvailabilityResponse)
+async def get_availability(
+    service_id: uuid.UUID,
+    date: str,  # YYYY-MM-DD
+    barber_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Calcula slots disponibles para una fecha y servicio.
+    Si barber_id es None, devuelve disponibilidad de TODOS los barberos.
+    """
+    tenant_id = current_user.tenant_id
+    
+    # Fetch service (para duration)
+    service = await db.get(Service, service_id)
+    if not service or service.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    
+    # Fetch tenant (para horarios)
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+    
+    # Parse date
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Usar YYYY-MM-DD")
+    
+    # Timezone del tenant
+    tenant_tz = ZoneInfo(tenant.timezone)
+    
+    # Horarios: parse HH:MM
+    opening_hour, opening_min = map(int, tenant.opening_time.split(":"))
+    closing_hour, closing_min = map(int, tenant.closing_time.split(":"))
+    
+    opening_dt = datetime(target_date.year, target_date.month, target_date.day, 
+                         opening_hour, opening_min, tzinfo=tenant_tz)
+    closing_dt = datetime(target_date.year, target_date.month, target_date.day, 
+                         closing_hour, closing_min, tzinfo=tenant_tz)
+    
+    # Generar slots posibles
+    duration = timedelta(minutes=service.duration_minutes)
+    slots = []
+    current = opening_dt
+    while current + duration <= closing_dt:
+        slots.append((current, current + duration))
+        current += duration
+    
+    # Fetch citas existentes para ese día (y barber si aplica)
+    query = select(Appointment).where(
+        Appointment.tenant_id == tenant_id,
+        Appointment.start_time >= opening_dt,
+        Appointment.start_time < closing_dt,
+        Appointment.status.in_([AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value])
+    )
+    if barber_id:
+        query = query.where(Appointment.barber_id == barber_id)
+    
+    result = await db.execute(query)
+    existing_appointments = result.scalars().all()
+    
+    # Excluir slots que se solapan con citas
+    available_slots = []
+    for slot_start, slot_end in slots:
+        conflict = False
+        for appt in existing_appointments:
+            if not (slot_end <= appt.start_time or slot_start >= appt.end_time):
+                conflict = True
+                break
+        if not conflict:
+            available_slots.append(AvailableSlot(start_time=slot_start, end_time=slot_end))
+    
+    return AvailabilityResponse(
+        service_id=service_id,
+        barber_id=barber_id,
+        date=date,
+        available_slots=available_slots
+    )
 
 @router.post("/", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_appointment(
@@ -167,10 +257,40 @@ async def create_appointment(
 
 @router.get("/", response_model=List[AppointmentResponse])
 async def list_appointments(
+    date: Optional[str] = None,  # YYYY-MM-DD
+    barber_id: Optional[uuid.UUID] = None,
+    status: Optional[str] = None,  # PENDING, CONFIRMED, COMPLETED, CANCELED, NO_SHOW
     db: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_active_user)
 ):
+    """
+    Lista citas del tenant actual.
+    Filtros opcionales: date, barber_id, status
+    """
     query = select(Appointment).where(Appointment.tenant_id == current_user.tenant_id)
+    
+    # Filtro por fecha
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+            tenant = await db.get(Tenant, current_user.tenant_id)
+            tenant_tz = ZoneInfo(tenant.timezone)
+            start_of_day = datetime(target_date.year, target_date.month, target_date.day, 0, 0, tzinfo=tenant_tz)
+            end_of_day = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, tzinfo=tenant_tz)
+            query = query.where(Appointment.start_time >= start_of_day, Appointment.start_time <= end_of_day)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Formato de fecha inválido. Usar YYYY-MM-DD")
+    
+    # Filtro por barbero
+    if barber_id:
+        query = query.where(Appointment.barber_id == barber_id)
+    
+    # Filtro por estado
+    if status:
+        if status not in ["PENDING", "CONFIRMED", "COMPLETED", "CANCELED", "NO_SHOW"]:
+            raise HTTPException(status_code=400, detail="Estado inválido")
+        query = query.where(Appointment.status == status)
+    
     result = await db.execute(query)
     return result.scalars().all()
 

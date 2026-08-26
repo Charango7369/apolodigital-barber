@@ -51,7 +51,7 @@ async def update_client(
     client_id: uuid.UUID,
     request: ClientUpdate,
     service: ClientService = Depends(get_client_service),
-    current_user: User = Depends(require_role(FRONT_DESK))
+    current_user: User = Depends(require_role(MANAGEMENT))  # antes: FRONT_DESK
 ):
     return await service.update_client(client_id=client_id, data=request, tenant_id=current_user.tenant_id)
 

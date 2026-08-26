@@ -8,7 +8,7 @@ from app.modules.users.models import UserRole
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
     first_name: str = Field(..., max_length=100)
     last_name: str = Field(..., max_length=100)
     role: UserRole

@@ -10,6 +10,7 @@ from app.modules.clients.router import router as clients_router
 from app.modules.services.router import router as services_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.public.router import router as public_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -35,6 +36,7 @@ app.include_router(clients_router)
 app.include_router(services_router)
 app.include_router(appointments_router)
 app.include_router(dashboard_router)
+app.include_router(public_router)
 
 @app.get("/health", tags=["Health"])
 async def health_check():

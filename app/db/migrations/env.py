@@ -36,7 +36,7 @@ if config.config_file_name is not None:
 
 
 target_metadata = Base.metadata
-print("🔥 TABLAS QUE ALEMBIC PUEDE VER:", target_metadata.tables.keys()) # <-- AGREGA ESTO
+print("TABLAS QUE ALEMBIC PUEDE VER:", target_metadata.tables.keys()) # <-- AGREGA ESTO
 
 def get_url() -> str:
     """Usar SIEMPRE la URL del .env"""

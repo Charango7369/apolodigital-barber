@@ -20,6 +20,10 @@ from app.modules.dashboard.schemas import (
     DashboardSummaryResponse, MyStatsResponse, AppointmentStatusCounts,
     BarberBreakdown, ServiceBreakdown
 )
+from app.modules.dashboard.schemas import (
+    DashboardSummaryResponse, MyStatsResponse, AppointmentStatusCounts,
+    BarberBreakdown, ServiceBreakdown, PeakHour, DayBreakdown  # AGREGAR ESTOS DOS
+)
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -41,17 +45,26 @@ async def get_dashboard_summary(
     repo: DashboardRepository = Depends(get_dashboard_repo),
     current_user: User = Depends(require_role(MANAGEMENT))
 ):
-    """Ingresos totales, comisiones y desglose por barbero/servicio. Solo ADMIN/MANAGER."""
+    """Ingresos totales, comisiones, desglose por barbero/servicio, y métricas adicionales. Solo ADMIN/MANAGER."""
     _validate_date_range(start_date, end_date)
     tenant_id = current_user.tenant_id
     tenant_tz = await get_tenant_timezone(db, tenant_id)
-    tenant = await db.get(Tenant, tenant_id)  # ya cacheado por identity map -- get_tenant_timezone lo trajo primero
+    tenant = await db.get(Tenant, tenant_id)
 
+    # Queries existentes
     counts_raw = await repo.get_appointment_counts(tenant_id, start_date, end_date, tenant_tz)
     revenue, commissions, _ = await repo.get_revenue_totals(tenant_id, start_date, end_date, tenant_tz)
     by_barber_raw = await repo.get_by_barber(tenant_id, start_date, end_date, tenant_tz)
     by_service_raw = await repo.get_by_service(tenant_id, start_date, end_date, tenant_tz)
 
+    # Nuevas queries
+    average_ticket = await repo.get_average_ticket(tenant_id, start_date, end_date, tenant_tz)
+    peak_hours_raw = await repo.get_peak_hours(tenant_id, start_date, end_date, tenant_tz)
+    top_payment_method = await repo.get_top_payment_method(tenant_id, start_date, end_date, tenant_tz)
+    new_clients, returning_clients = await repo.get_new_vs_returning_clients(tenant_id, start_date, end_date, tenant_tz)
+    appointments_by_day_raw = await repo.get_appointments_by_day(tenant_id, start_date, end_date, tenant_tz)
+
+    # Parsear resultados
     appointment_counts = AppointmentStatusCounts(
         pending=counts_raw.get(AppointmentStatus.PENDING.value, 0),
         confirmed=counts_raw.get(AppointmentStatus.CONFIRMED.value, 0),
@@ -76,13 +89,26 @@ async def get_dashboard_summary(
         for row in by_service_raw
     ]
 
+    peak_hours = [
+        PeakHour(hour=int(row[0]), count=row[1])
+        for row in peak_hours_raw
+    ]
+
+    appointments_by_day = [
+        DayBreakdown(day=row[0], appointment_count=row[1], revenue=Decimal(str(row[2])))
+        for row in appointments_by_day_raw
+    ]
+
     return DashboardSummaryResponse(
         start_date=start_date, end_date=end_date, currency=tenant.currency,
         total_revenue=revenue, total_commissions=commissions, net_revenue=revenue - commissions,
+        average_ticket=average_ticket,
         appointment_counts=appointment_counts, by_barber=by_barber, by_service=by_service,
+        peak_hours=peak_hours, top_payment_method=top_payment_method,
+        new_clients=new_clients, returning_clients=returning_clients,
+        appointments_by_day=appointments_by_day,
     )
-
-
+    
 @router.get("/me", response_model=MyStatsResponse)
 async def get_my_stats(
     start_date: date = Query(..., description="Fecha inicial (YYYY-MM-DD), inclusive"),
