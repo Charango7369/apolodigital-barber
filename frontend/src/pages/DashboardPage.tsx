@@ -18,6 +18,7 @@ import { AgendaView } from '../components/AgendaView';
 import { ServicesView } from '../components/ServicesView';
 import { ClientsView } from '../components/ClientsView';
 import { BarbersView } from '../components/BarbersView';
+import { UsersView } from '../components/UsersView';
 import { PosView } from '../components/PosView';
 import { StatsView } from '../components/StatsView';
 import { OrganizationsView } from '../components/OrganizationsView';
@@ -426,6 +427,13 @@ export const DashboardPage: React.FC = () => {
                   barbers={barbers}
                   onCreateBarber={handleCreateBarber}
                   onUpdateBarber={handleUpdateBarber}
+                />
+              )}
+
+              {currentTab === 'users' && (
+                <UsersView
+                  currentUser={currentUser}
+                  barbers={barbers}
                 />
               )}
 

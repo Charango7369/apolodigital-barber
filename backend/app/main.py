@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .database import init_db
-from .routes import auth, cash, services, barbers, clients, appointments, checkout, stats, organizations
+from .routes import auth, cash, services, barbers, clients, appointments, checkout, stats, organizations, users
 
 app = FastAPI(
     title="ApoloDigital Barber API",
@@ -36,6 +36,7 @@ app.include_router(appointments.router, prefix="/api")
 app.include_router(checkout.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
 app.include_router(organizations.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 
 @app.get("/api/health")
 def health_check():

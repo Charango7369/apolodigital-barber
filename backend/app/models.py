@@ -36,7 +36,9 @@ class BarberBase(BaseModel):
     is_active: bool = True
 
 class BarberCreate(BarberBase):
-    pass
+    create_credentials: Optional[bool] = False
+    email: Optional[str] = None
+    password: Optional[str] = None
 
 class BarberUpdate(BaseModel):
     name: Optional[str] = None
@@ -47,9 +49,45 @@ class BarberUpdate(BaseModel):
     commission_rate: Optional[float] = None
     rating: Optional[float] = None
     is_active: Optional[bool] = None
+    update_credentials: Optional[bool] = False
+    email: Optional[str] = None
+    password: Optional[str] = None
 
 class BarberResponse(BarberBase):
     id: str
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+
+# System Users & Credentials (CRUD)
+class UserBase(BaseModel):
+    email: str
+    full_name: str
+    role: str = "barber"  # owner, admin, barber
+    barber_id: Optional[str] = None
+    is_active: bool = True
+
+class UserCreate(UserBase):
+    password: str
+    tenant_id: Optional[str] = None
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    barber_id: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: str
+    tenant_id: str
+    email: str
+    full_name: str
+    role: str
+    barber_id: Optional[str] = None
+    barber_name: Optional[str] = None
+    is_active: bool = True
+    created_at: str
 
 # Clients
 class ClientBase(BaseModel):

@@ -86,6 +86,39 @@ export interface Barber {
   commission_rate: number;
   rating: number;
   is_active: boolean;
+  user_id?: string;
+  user_email?: string;
+}
+
+export interface SystemUser {
+  id: string;
+  tenant_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  barber_id?: string;
+  barber_name?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface UserCreateData {
+  email: string;
+  password: string;
+  full_name: string;
+  role: UserRole;
+  barber_id?: string;
+  tenant_id?: string;
+  is_active?: boolean;
+}
+
+export interface UserUpdateData {
+  email?: string;
+  password?: string;
+  full_name?: string;
+  role?: UserRole;
+  barber_id?: string;
+  is_active?: boolean;
 }
 
 export interface Client {

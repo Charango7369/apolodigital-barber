@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 import uuid
+from datetime import datetime
 from ..database import get_db, DEFAULT_TENANT_ID
 from ..models import BarberResponse, BarberCreate, BarberUpdate
-from ..auth import get_current_user_optional, RequireRole
+from ..auth import get_current_user_optional, RequireRole, hash_password
 
 router = APIRouter(prefix="/barbers", tags=["barbers"])
 
@@ -29,13 +30,19 @@ def get_barbers(
     if not tid:
         tid = user.get("tenant_id") if user else DEFAULT_TENANT_ID
 
-    query = "SELECT * FROM barbers WHERE tenant_id = ?"
+    query = """
+        SELECT b.id, b.tenant_id, b.name, b.nickname, b.photo_url, b.phone, b.specialty, 
+               b.commission_rate, b.rating, b.is_active, u.id as user_id, u.email as user_email
+        FROM barbers b
+        LEFT JOIN users u ON u.barber_id = b.id AND u.tenant_id = b.tenant_id
+        WHERE b.tenant_id = ?
+    """
     params = [tid]
 
     if only_active:
-        query += " AND is_active = 1"
+        query += " AND b.is_active = 1"
 
-    query += " ORDER BY name ASC"
+    query += " ORDER BY b.name ASC"
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
@@ -63,7 +70,28 @@ def create_barber(
         payload.commission_rate, payload.rating, 1 if payload.is_active else 0
     ))
     conn.commit()
-    cursor.execute("SELECT * FROM barbers WHERE id = ? AND tenant_id = ?", (bid, tid))
+
+    # Create credentials if requested
+    if payload.create_credentials and payload.email and payload.password:
+        clean_email = payload.email.strip().lower()
+        cursor.execute("SELECT id FROM users WHERE email = ? AND tenant_id = ?", (clean_email, tid))
+        if not cursor.fetchone():
+            uid = f"usr-{uuid.uuid4().hex[:8]}"
+            hashed_pw = hash_password(payload.password)
+            now_str = datetime.now().isoformat()
+            cursor.execute("""
+                INSERT INTO users (id, tenant_id, email, hashed_password, full_name, role, barber_id, is_active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (uid, tid, clean_email, hashed_pw, payload.name, "barber", bid, 1, now_str))
+            conn.commit()
+
+    cursor.execute("""
+        SELECT b.id, b.tenant_id, b.name, b.nickname, b.photo_url, b.phone, b.specialty, 
+               b.commission_rate, b.rating, b.is_active, u.id as user_id, u.email as user_email
+        FROM barbers b
+        LEFT JOIN users u ON u.barber_id = b.id AND u.tenant_id = b.tenant_id
+        WHERE b.id = ? AND b.tenant_id = ?
+    """, (bid, tid))
     row = cursor.fetchone()
     conn.close()
     return dict(row)
@@ -122,7 +150,38 @@ def update_barber(
         cursor.execute(f"UPDATE barbers SET {', '.join(updates)} WHERE id = ? AND tenant_id = ?", params)
         conn.commit()
 
-    cursor.execute("SELECT * FROM barbers WHERE id = ? AND tenant_id = ?", (barber_id, tid))
+    # Update or create credentials if requested
+    if payload.update_credentials and payload.email:
+        clean_email = payload.email.strip().lower()
+        cursor.execute("SELECT id FROM users WHERE barber_id = ? AND tenant_id = ?", (barber_id, tid))
+        existing_user = cursor.fetchone()
+        if existing_user:
+            user_updates = ["email = ?"]
+            user_params = [clean_email]
+            if payload.password and payload.password.strip():
+                user_updates.append("hashed_password = ?")
+                user_params.append(hash_password(payload.password.strip()))
+            user_params.append(existing_user[0])
+            cursor.execute(f"UPDATE users SET {', '.join(user_updates)} WHERE id = ?", user_params)
+            conn.commit()
+        else:
+            uid = f"usr-{uuid.uuid4().hex[:8]}"
+            initial_pw = payload.password.strip() if payload.password else "Apolo2026!"
+            hashed_pw = hash_password(initial_pw)
+            now_str = datetime.now().isoformat()
+            cursor.execute("""
+                INSERT INTO users (id, tenant_id, email, hashed_password, full_name, role, barber_id, is_active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (uid, tid, clean_email, hashed_pw, payload.name or "Barbero", "barber", barber_id, 1, now_str))
+            conn.commit()
+
+    cursor.execute("""
+        SELECT b.id, b.tenant_id, b.name, b.nickname, b.photo_url, b.phone, b.specialty, 
+               b.commission_rate, b.rating, b.is_active, u.id as user_id, u.email as user_email
+        FROM barbers b
+        LEFT JOIN users u ON u.barber_id = b.id AND u.tenant_id = b.tenant_id
+        WHERE b.id = ? AND b.tenant_id = ?
+    """, (barber_id, tid))
     row = cursor.fetchone()
     conn.close()
     return dict(row)

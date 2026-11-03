@@ -1,4 +1,4 @@
-import { Service, Barber, Client, Appointment, Sale, DashboardMetrics, BusinessInfo, User, CashShift, Organization, OrganizationCreateData } from '../types';
+import { Service, Barber, Client, Appointment, Sale, DashboardMetrics, BusinessInfo, User, CashShift, Organization, OrganizationCreateData, SystemUser, UserCreateData, UserUpdateData } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '/api';
 
@@ -404,5 +404,53 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Error al desactivar la barbería');
     }
+  },
+
+  // Users & Access Credentials CRUD
+  async getUsers(tenantId?: string): Promise<SystemUser[]> {
+    const url = tenantId ? `${API_BASE}/users?tenant_id=${tenantId}` : `${API_BASE}/users`;
+    const res = await fetchWithAuth(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error al cargar usuarios y credenciales');
+    }
+    return res.json();
+  },
+
+  async createUser(data: UserCreateData): Promise<SystemUser> {
+    const res = await fetchWithAuth(`${API_BASE}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error al crear la credencial de usuario');
+    }
+    return res.json();
+  },
+
+  async updateUser(userId: string, data: UserUpdateData): Promise<SystemUser> {
+    const res = await fetchWithAuth(`${API_BASE}/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error al actualizar credencial de usuario');
+    }
+    return res.json();
+  },
+
+  async deleteUser(userId: string): Promise<{ status: string; message: string }> {
+    const res = await fetchWithAuth(`${API_BASE}/users/${userId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Error al eliminar credencial');
+    }
+    return res.json();
   }
 };

@@ -8,7 +8,8 @@ import {
   BarChart3,
   ExternalLink,
   Shield,
-  Building2
+  Building2,
+  KeyRound
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, cur
     { id: 'services', label: 'Servicios & Tarifas', icon: Scissors, roles: ['superadmin', 'owner', 'admin', 'barber'] },
     { id: 'clients', label: 'Clientes & CRM', icon: Users, badge: 'WhatsApp', roles: ['superadmin', 'owner', 'admin', 'barber'] },
     { id: 'barbers', label: 'Equipo Barberos', icon: Sparkles, roles: ['superadmin', 'owner', 'admin'] },
+    { id: 'users', label: 'Cuentas & Accesos', icon: KeyRound, badge: 'Seguridad', roles: ['superadmin', 'owner', 'admin'] },
     { id: 'pos', label: 'Caja & Checkout', icon: CreditCard, badge: 'QR Simple', roles: ['superadmin', 'owner', 'admin'] },
     { id: 'stats', label: 'Métricas de Negocio', icon: BarChart3, roles: ['superadmin', 'owner', 'admin'] },
   ];
