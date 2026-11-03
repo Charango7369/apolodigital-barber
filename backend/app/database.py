@@ -5,12 +5,95 @@ from datetime import datetime, date, timedelta
 from .auth import hash_password
 
 DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "barber.db"))
+DATABASE_URL = os.getenv("DATABASE_URL")
 DEFAULT_TENANT_ID = "org_apolo_sopocachi"
 
+def is_postgres() -> bool:
+    return bool(DATABASE_URL and ("postgres://" in DATABASE_URL or "postgresql://" in DATABASE_URL))
+
+class PGRow(dict):
+    def __init__(self, data: dict, values_list: list):
+        super().__init__(data)
+        self._values = values_list
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self._values[item]
+        return super().__getitem__(item)
+
+class PGCursor:
+    def __init__(self, raw_cursor):
+        self._cursor = raw_cursor
+
+    def _convert_sql(self, sql: str) -> str:
+        return sql.replace("?", "%s")
+
+    def execute(self, sql: str, params=None):
+        converted = self._convert_sql(sql)
+        if params is None:
+            return self._cursor.execute(converted)
+        return self._cursor.execute(converted, params)
+
+    def executemany(self, sql: str, seq_of_params):
+        converted = self._convert_sql(sql)
+        return self._cursor.executemany(converted, seq_of_params)
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        return PGRow(row, list(row.values()))
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        return [PGRow(row, list(row.values())) for row in rows]
+
+    def close(self):
+        return self._cursor.close()
+
+    def __iter__(self):
+        for row in self._cursor:
+            yield PGRow(row, list(row.values()))
+
+class PGConnection:
+    def __init__(self, raw_conn):
+        self._conn = raw_conn
+
+    def cursor(self):
+        import psycopg2.extras
+        return PGCursor(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.rollback()
+        else:
+            self.commit()
+        self.close()
+
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if is_postgres():
+        import psycopg2
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(url)
+        return PGConnection(conn)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
     conn = get_db()
@@ -38,7 +121,7 @@ def init_db():
         email TEXT NOT NULL,
         hashed_password TEXT NOT NULL,
         full_name TEXT NOT NULL,
-        role TEXT NOT NULL, -- 'owner', 'admin', 'barber', 'client'
+        role TEXT NOT NULL,
         barber_id TEXT,
         is_active INTEGER DEFAULT 1,
         created_at TEXT NOT NULL,
@@ -59,7 +142,7 @@ def init_db():
         closed_by_user_id TEXT,
         closed_by_name TEXT,
         closed_at TEXT,
-        status TEXT NOT NULL DEFAULT 'open', -- 'open' | 'closed'
+        status TEXT NOT NULL DEFAULT 'open',
         system_cash_sales REAL DEFAULT 0.0,
         system_qr_sales REAL DEFAULT 0.0,
         system_total_sales REAL DEFAULT 0.0,
@@ -162,7 +245,7 @@ def init_db():
     )
     """)
 
-    # Dynamic migrations for existing databases
+    # Dynamic migrations
     migrations = [
         ("services", "tenant_id", "TEXT NOT NULL DEFAULT 'org_apolo_sopocachi'"),
         ("barbers", "tenant_id", "TEXT NOT NULL DEFAULT 'org_apolo_sopocachi'"),
@@ -178,11 +261,14 @@ def init_db():
 
     for table, col, col_type in migrations:
         try:
-            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
+            if is_postgres():
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
+            else:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+        except Exception:
             pass
 
-    # Indices for Multi-Tenant performance and security
+    # Indices for performance
     indices = [
         ("idx_services_tenant", "services(tenant_id, category)"),
         ("idx_barbers_tenant", "barbers(tenant_id, is_active)"),
@@ -196,7 +282,7 @@ def init_db():
     for idx_name, idx_def in indices:
         try:
             cursor.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def}")
-        except sqlite3.OperationalError:
+        except Exception:
             pass
 
     # Ensure default Organization exists
@@ -222,8 +308,7 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         seed_users(cursor)
     else:
-        # Check if superadmin user exists, if not create it
-        cursor.execute("SELECT COUNT(*) FROM users WHERE email = 'superadmin@apolodigital.lat'")
+        cursor.execute("SELECT COUNT(*) FROM users WHERE email = ?", ("superadmin@apolodigital.lat",))
         if cursor.fetchone()[0] == 0:
             now_str = datetime.now().isoformat()
             default_pw_hash = hash_password("Apolo2026!")
@@ -237,7 +322,7 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         seed_data(cursor)
 
-    # Ensure at least one initial open cash shift exists for seamless local workflow
+    # Ensure at least one initial open cash shift exists
     cursor.execute("SELECT COUNT(*) FROM cash_shifts WHERE tenant_id = ? AND status = 'open'", (DEFAULT_TENANT_ID,))
     if cursor.fetchone()[0] == 0:
         now_str = datetime.now().isoformat()
@@ -269,7 +354,6 @@ def seed_users(cursor):
     default_pw_hash = hash_password("Apolo2026!")
 
     users = [
-        # (id, tenant_id, email, hashed_password, full_name, role, barber_id, is_active, created_at)
         ("usr-superadmin-01", DEFAULT_TENANT_ID, "superadmin@apolodigital.lat", default_pw_hash, "Super Administrador (SaaS Global)", "superadmin", None, 1, now_str),
         ("usr-owner-01", DEFAULT_TENANT_ID, "dueno@apolodigital.lat", default_pw_hash, "Dueño Apolo", "owner", None, 1, now_str),
         ("usr-admin-01", DEFAULT_TENANT_ID, "admin@apolodigital.lat", default_pw_hash, "Admin Recepción", "admin", None, 1, now_str),
@@ -277,7 +361,10 @@ def seed_users(cursor):
         ("usr-client-01", DEFAULT_TENANT_ID, "cliente@apolodigital.lat", default_pw_hash, "Juan Pablo Claure", "client", None, 1, now_str)
     ]
 
-    cursor.executemany("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", users)
+    cursor.executemany("""
+        INSERT INTO users (id, tenant_id, email, hashed_password, full_name, role, barber_id, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, users)
 
 def seed_data(cursor):
     now_str = datetime.now().isoformat()
@@ -295,7 +382,10 @@ def seed_data(cursor):
         ("srv-7", DEFAULT_TENANT_ID, "Corte Infantil (Niños menores de 12)", "Cortes", 30, 35.0, "Paciencia, estilo moderno o escolar para los más pequeños.", 1),
         ("srv-8", DEFAULT_TENANT_ID, "Limpieza Facial Express con Mascarilla", "Tratamientos", 25, 30.0, "Exfoliación suave, puntos negros y mascarilla peel-off refrescante.", 1)
     ]
-    cursor.executemany("INSERT INTO services VALUES (?, ?, ?, ?, ?, ?, ?, ?)", services)
+    cursor.executemany("""
+        INSERT INTO services (id, tenant_id, name, category, duration_minutes, price, description, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, services)
 
     # 2. Barbers
     barbers = [
@@ -304,7 +394,10 @@ def seed_data(cursor):
         ("bar-3", DEFAULT_TENANT_ID, "Mateo Quispe", "El Artista", "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80", "+591 73456789", "Colorimetría & Tijera Clásica", 0.50, 4.88, 1),
         ("bar-4", DEFAULT_TENANT_ID, "Diego Torrez", "Speed Fade", "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80", "+591 74567890", "Cortes Ejecutivos & Niños", 0.50, 4.80, 1)
     ]
-    cursor.executemany("INSERT INTO barbers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", barbers)
+    cursor.executemany("""
+        INSERT INTO barbers (id, tenant_id, name, nickname, photo_url, phone, specialty, commission_rate, rating, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, barbers)
 
     # 3. Clients
     clients = [
@@ -315,7 +408,10 @@ def seed_data(cursor):
         ("cli-5", DEFAULT_TENANT_ID, "Fernando Siles", "+591 70554433", "fsiles@gmail.com", "Taper fade con diseño lateral discreto", 5, 230.0, today_str, now_str),
         ("cli-6", DEFAULT_TENANT_ID, "Gabriel Flores", "+591 78901234", "gflores@hotmail.com", "Limpieza de cejas con navaja y corte ejecutivo", 2, 80.0, tomorrow_str, now_str)
     ]
-    cursor.executemany("INSERT INTO clients VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", clients)
+    cursor.executemany("""
+        INSERT INTO clients (id, tenant_id, name, phone, email, notes, total_visits, total_spent, last_visit, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, clients)
 
     # 4. Appointments
     appointments = [
@@ -327,15 +423,21 @@ def seed_data(cursor):
         ("apt-6", DEFAULT_TENANT_ID, "cli-4", "Mateo Villarroel", "+591 71239845", "bar-1", "Alex Mendoza", "srv-4", "Combo Apolo Master (Corte + Barba)", tomorrow_str, "10:30", 60, 75.0, "confirmed", "Evento el fin de semana", now_str),
         ("apt-7", DEFAULT_TENANT_ID, "cli-2", "Roberto Morales", "+591 77543210", "bar-4", "Diego Torrez", "srv-7", "Corte Infantil (Niños menores de 12)", tomorrow_str, "15:00", 30, 35.0, "confirmed", "Viene con su hijo", now_str)
     ]
-    cursor.executemany("INSERT INTO appointments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", appointments)
+    cursor.executemany("""
+        INSERT INTO appointments (id, tenant_id, client_id, client_name, client_phone, barber_id, barber_name, service_id, service_name, date, time, duration_minutes, price, status, notes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, appointments)
 
     # 5. Sales
     sales = [
         ("sal-1", DEFAULT_TENANT_ID, "shift-initial-001", "apt-1", "Juan Pablo Claure", "bar-1", "Alex Mendoza", 50.0, 10.0, 60.0, "cash", None, 50.0, 0.60, 30.0, "Excelente servicio, dejó propina de 10 Bs.", now_str),
         ("sal-2", DEFAULT_TENANT_ID, "shift-initial-001", "apt-2", "Roberto Morales", "bar-2", "Carlos Rocha", 40.0, 5.0, 45.0, "qr_simple", "QR-AUTH-882190", 40.0, 0.55, 22.0, "Comprobante QR verificado", now_str)
     ]
-    cursor.executemany("INSERT INTO sales VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", sales)
+    cursor.executemany("""
+        INSERT INTO sales (id, tenant_id, cash_shift_id, appointment_id, client_name, barber_id, barber_name, subtotal, tip, total, payment_method, qr_reference_code, service_price_snapshot, commission_percentage_snapshot, commission_amount, notes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, sales)
 
 if __name__ == "__main__":
     init_db()
-    print("Database initialized, migrated, and seeded successfully at:", DB_PATH)
+    print("Database initialized, migrated, and seeded successfully at:", DB_PATH if not is_postgres() else "PostgreSQL")
