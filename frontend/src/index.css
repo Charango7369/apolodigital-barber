@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --blue-deep: #0a1628;
+    --blue-mid: #0d2347;
+    --blue-surface: #102a54;
+    --blue-brand: #1a4fd6;
+    --blue-bright: #3b82f6;
+    --blue-electric: #60a5fa;
+    --white: #ffffff;
+    --white-soft: #f0f6ff;
+    --white-muted: #c8deff;
+    --gold: #f0b429;
+    --gold-soft: #fbbf24;
+    --gray-text: #94a3b8;
+    --border-brand: rgba(59, 130, 246, 0.2);
+  }
+
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--blue-deep);
+    color: var(--white);
+    overflow-x: hidden;
+  }
+
+  /* Textura sutil oficial de apolodigital.lat */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.55;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Syne', sans-serif;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #0a1628;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a4fd6;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+}
+
+/* Animaciones y Efectos Apolo */
+@keyframes barber-glow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(240, 180, 41, 0.5)); }
+  50% { filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.8)); }
+}
+
+.glow-gold {
+  animation: barber-glow 2.5s ease-in-out infinite;
+}
+
+@keyframes pole-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 50px 50px; }
+}
+
+.barber-pole-stripes {
+  background: repeating-linear-gradient(
+    45deg,
+    #ef4444,
+    #ef4444 10px,
+    #ffffff 10px,
+    #ffffff 20px,
+    #3b82f6 20px,
+    #3b82f6 30px,
+    #ffffff 30px,
+    #ffffff 40px
+  );
+  background-size: 56px 56px;
+  animation: pole-stripes 2s linear infinite;
+}
+
+.glass-panel {
+  background: rgba(13, 35, 71, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.glass-card {
+  background: rgba(16, 42, 84, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+}

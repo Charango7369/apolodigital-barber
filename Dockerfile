@@ -1,16 +1,18 @@
-FROM python:3.11
+# Multi-stage build: Frontend + Backend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-# Crear directorio de trabajo
+FROM python:3.11-slim
 WORKDIR /app
+COPY backend/requirements.txt ./backend/
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend/ ./backend/
+COPY main.py ./
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Copiar requirements
-COPY requirements.txt .
-
-# Instalar dependencias
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copiar todo el proyecto
-COPY . .
-
-# Comando de inicio
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+EXPOSE 8008
+CMD ["python", "main.py"]
