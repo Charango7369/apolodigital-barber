@@ -15,7 +15,8 @@ import {
   Eye,
   EyeOff,
   UserCheck,
-  UploadCloud
+  UploadCloud,
+  X
 } from 'lucide-react';
 import { Barber } from '../types';
 
@@ -47,6 +48,11 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Status & Feedback state
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenCreate = () => {
@@ -61,6 +67,9 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
     setEmail('');
     setPassword('Apolo2026!');
     setShowPassword(false);
+    setIsSaving(false);
+    setSaveSuccess(false);
+    setErrorMessage(null);
     setIsModalOpen(true);
   };
 
@@ -76,6 +85,9 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
     setEmail(b.user_email || '');
     setPassword('');
     setShowPassword(false);
+    setIsSaving(false);
+    setSaveSuccess(false);
+    setErrorMessage(null);
     setIsModalOpen(true);
   };
 
@@ -133,42 +145,55 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-
-    if (manageCredentials && !email.trim()) {
-      alert('Si habilitas credenciales de acceso, debes ingresar un correo electrónico.');
+    if (!name.trim()) {
+      setErrorMessage('Por favor ingresa el nombre completo del barbero.');
       return;
     }
 
-    if (editingBarber) {
-      await onUpdateBarber(editingBarber.id, {
-        name,
-        nickname,
-        photo_url: photoUrl,
-        phone,
-        specialty,
-        commission_rate: commissionRate / 100,
-        update_credentials: manageCredentials,
-        email: manageCredentials ? email.trim().toLowerCase() : undefined,
-        password: manageCredentials && password ? password : undefined,
-      });
-    } else {
-      await onCreateBarber({
-        name,
-        nickname,
-        photo_url: photoUrl,
-        phone,
-        specialty,
-        commission_rate: commissionRate / 100,
-        rating: 5.0,
-        is_active: true,
-        create_credentials: manageCredentials,
-        email: manageCredentials ? email.trim().toLowerCase() : undefined,
-        password: manageCredentials ? (password || 'Apolo2026!') : undefined,
-      });
+    if (manageCredentials && !email.trim()) {
+      setErrorMessage('Si habilitas credenciales de acceso, debes ingresar un correo electrónico.');
+      return;
     }
 
-    setIsModalOpen(false);
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    try {
+      if (editingBarber) {
+        await onUpdateBarber(editingBarber.id, {
+          name: name.trim(),
+          nickname: nickname.trim(),
+          photo_url: photoUrl,
+          phone: phone.trim(),
+          specialty: specialty.trim(),
+          commission_rate: commissionRate / 100,
+          update_credentials: manageCredentials,
+          email: manageCredentials ? email.trim().toLowerCase() : undefined,
+          password: manageCredentials && password ? password : undefined,
+        });
+      } else {
+        await onCreateBarber({
+          name: name.trim(),
+          nickname: nickname.trim(),
+          photo_url: photoUrl,
+          phone: phone.trim(),
+          specialty: specialty.trim(),
+          commission_rate: commissionRate / 100,
+          rating: 5.0,
+          is_active: true,
+          create_credentials: manageCredentials,
+          email: manageCredentials ? email.trim().toLowerCase() : undefined,
+          password: manageCredentials ? (password || 'Apolo2026!') : undefined,
+        });
+      }
+      setSaveSuccess(true);
+    } catch (err: any) {
+      console.error('Error al guardar barbero:', err);
+      setErrorMessage(err.message || 'Error al guardar los datos del barbero.');
+      setSaveSuccess(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -313,6 +338,15 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0a1628]/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
           <div className="w-full max-w-lg rounded-2xl bg-[#0d2347] border border-[#3b82f6]/40 p-6 shadow-2xl relative my-8">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-5 right-5 p-1.5 rounded-lg text-[#94a3b8] hover:text-white hover:bg-[#102a54] transition-all"
+              title={saveSuccess ? "Salir" : "Cerrar"}
+            >
+              <X className="w-5 h-5" />
+            </button>
+
             <h3 className="font-heading font-bold text-lg text-white mb-1">
               {editingBarber ? 'Editar Perfil del Barbero' : 'Registrar Nuevo Barbero'}
             </h3>
@@ -500,20 +534,55 @@ export const BarbersView: React.FC<BarbersViewProps> = ({
                 )}
               </div>
 
+              {/* Error Feedback */}
+              {errorMessage && (
+                <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs animate-in fade-in">
+                  <span className="w-2 h-2 rounded-full bg-rose-400 mt-1 shrink-0"></span>
+                  <span className="flex-1">{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Success Feedback */}
+              {saveSuccess && (
+                <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs animate-in fade-in">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="flex-1 font-medium">
+                    {editingBarber ? '¡Cambios guardados con éxito!' : '¡Barbero registrado con éxito!'} Haz clic en <strong>Salir</strong> para volver al panel.
+                  </span>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#102a54] text-[#c8deff] hover:text-white text-xs font-medium"
+                  className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    saveSuccess
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
+                      : 'bg-[#102a54] text-[#c8deff] hover:text-white border border-[#3b82f6]/30'
+                  }`}
                 >
-                  Cancelar
+                  {saveSuccess ? 'Salir' : 'Cancelar'}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#1a4fd6] to-[#2563eb] text-white text-xs font-bold shadow-lg shadow-[#1a4fd6]/30"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#1a4fd6] to-[#2563eb] hover:brightness-110 text-white text-xs font-bold shadow-lg shadow-[#1a4fd6]/30 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
                 >
-                  {editingBarber ? 'Guardar Cambios' : 'Registrar Barbero'}
+                  {isSaving ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : saveSuccess ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      <span>{editingBarber ? '✓ Guardado' : '✓ Registrado'}</span>
+                    </>
+                  ) : (
+                    <span>{editingBarber ? 'Guardar Cambios' : 'Registrar Barbero'}</span>
+                  )}
                 </button>
               </div>
             </form>

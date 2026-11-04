@@ -26,22 +26,30 @@ def get_dashboard_metrics(
     # 1. Sales today
     if barber_filter:
         cursor.execute("""
-            SELECT SUM(total), SUM(subtotal), SUM(tip), COUNT(*), SUM(commission_amount) 
+            SELECT COALESCE(SUM(total), 0) AS total_revenue, 
+                   COALESCE(SUM(subtotal), 0) AS total_subtotal, 
+                   COALESCE(SUM(tip), 0) AS total_tips, 
+                   COUNT(*) AS sales_count, 
+                   COALESCE(SUM(commission_amount), 0) AS total_commissions 
             FROM sales 
             WHERE tenant_id = ? AND barber_id = ? AND created_at LIKE ?
         """, (tid, barber_filter, f"{target_date}%"))
     else:
         cursor.execute("""
-            SELECT SUM(total), SUM(subtotal), SUM(tip), COUNT(*), SUM(commission_amount) 
+            SELECT COALESCE(SUM(total), 0) AS total_revenue, 
+                   COALESCE(SUM(subtotal), 0) AS total_subtotal, 
+                   COALESCE(SUM(tip), 0) AS total_tips, 
+                   COUNT(*) AS sales_count, 
+                   COALESCE(SUM(commission_amount), 0) AS total_commissions 
             FROM sales 
             WHERE tenant_id = ? AND created_at LIKE ?
         """, (tid, f"{target_date}%"))
 
     sales_row = cursor.fetchone()
-    today_revenue = sales_row[0] or 0.0
-    today_tips = sales_row[2] or 0.0
-    today_sales_count = sales_row[3] or 0
-    today_commissions = sales_row[4] or 0.0
+    today_revenue = sales_row[0] if sales_row else 0.0
+    today_tips = sales_row[2] if sales_row else 0.0
+    today_sales_count = sales_row[3] if sales_row else 0
+    today_commissions = sales_row[4] if sales_row else 0.0
 
     # 2. Total appointments today
     if barber_filter:

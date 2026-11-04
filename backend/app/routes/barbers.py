@@ -53,8 +53,8 @@ def create_barber(
     payload: BarberCreate,
     user: Optional[dict] = Depends(get_current_user_optional)
 ):
-    if user and user.get("role") not in ["owner", "admin"]:
-        raise HTTPException(status_code=403, detail="Violación SoD: Solo Administradores o Dueños pueden dar de alta a nuevos barberos.")
+    if user and user.get("role") not in ["owner", "admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Violación SoD: Solo Administradores, Dueños o Superadministradores pueden dar de alta a nuevos barberos.")
 
     tid = user.get("tenant_id") if user else DEFAULT_TENANT_ID
     conn = get_db()
@@ -105,18 +105,34 @@ def update_barber(
     if user and user.get("role") in ["barber", "client"]:
         raise HTTPException(status_code=403, detail="Violación SoD: No autorizado para modificar perfiles de personal.")
 
-    # SoD: Solo el Dueño puede alterar las comisiones de los barberos
-    if payload.commission_rate is not None:
-        if user and user.get("role") != "owner":
-            raise HTTPException(status_code=403, detail="Violación SoD: Únicamente el Dueño tiene privilegios para modificar los porcentajes de comisión.")
-
     tid = user.get("tenant_id") if user else DEFAULT_TENANT_ID
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM barbers WHERE id = ? AND tenant_id = ?", (barber_id, tid))
-    if not cursor.fetchone():
+
+    cursor.execute("""
+        SELECT id, tenant_id, name, nickname, photo_url, phone, specialty, commission_rate, rating, is_active 
+        FROM barbers WHERE id = ? AND tenant_id = ?
+    """, (barber_id, tid))
+    current_barber = cursor.fetchone()
+    if not current_barber:
         conn.close()
         raise HTTPException(status_code=404, detail="Barbero no encontrado")
+
+    # SoD: Solo el Dueño o Superadministrador puede alterar los porcentajes de comisiones
+    if payload.commission_rate is not None:
+        try:
+            current_rate = float(current_barber["commission_rate"])
+        except Exception:
+            current_rate = float(current_barber[7])
+
+        # Solo validamos si realmente hay un cambio en el porcentaje de comisión
+        if abs(current_rate - float(payload.commission_rate)) > 0.001:
+            if user and user.get("role") not in ["owner", "superadmin"]:
+                conn.close()
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Violación SoD: Únicamente el Dueño o Superadministrador tiene privilegios para modificar los porcentajes de comisión."
+                )
 
     updates = []
     params = []
@@ -191,8 +207,8 @@ def delete_barber(
     barber_id: str,
     user: Optional[dict] = Depends(get_current_user_optional)
 ):
-    if user and user.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Violación SoD: Solo el Dueño puede dar de baja a un barbero.")
+    if user and user.get("role") not in ["owner", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Violación SoD: Solo el Dueño o Superadministrador puede dar de baja a un barbero.")
 
     tid = user.get("tenant_id") if user else DEFAULT_TENANT_ID
     conn = get_db()

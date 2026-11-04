@@ -12,9 +12,10 @@ def is_postgres() -> bool:
     return bool(DATABASE_URL and ("postgres://" in DATABASE_URL or "postgresql://" in DATABASE_URL))
 
 class PGRow(dict):
-    def __init__(self, data: dict, values_list: list):
+    def __init__(self, col_names: list, values: tuple):
+        data = {col_names[i]: values[i] for i in range(min(len(col_names), len(values)))}
         super().__init__(data)
-        self._values = values_list
+        self._values = list(values)
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -42,26 +43,32 @@ class PGCursor:
         row = self._cursor.fetchone()
         if row is None:
             return None
-        return PGRow(row, list(row.values()))
+        col_names = [d[0] for d in self._cursor.description] if self._cursor.description else []
+        return PGRow(col_names, row)
 
     def fetchall(self):
         rows = self._cursor.fetchall()
-        return [PGRow(row, list(row.values())) for row in rows]
+        if not rows:
+            return []
+        col_names = [d[0] for d in self._cursor.description] if self._cursor.description else []
+        return [PGRow(col_names, row) for row in rows]
 
     def close(self):
         return self._cursor.close()
 
     def __iter__(self):
+        if not self._cursor.description:
+            return
+        col_names = [d[0] for d in self._cursor.description]
         for row in self._cursor:
-            yield PGRow(row, list(row.values()))
+            yield PGRow(col_names, row)
 
 class PGConnection:
     def __init__(self, raw_conn):
         self._conn = raw_conn
 
     def cursor(self):
-        import psycopg2.extras
-        return PGCursor(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
+        return PGCursor(self._conn.cursor())
 
     def commit(self):
         return self._conn.commit()
